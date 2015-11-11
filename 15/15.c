@@ -24,6 +24,8 @@ int main(int argc, char *argv[]) {
             printf("Child %d\n", i);
             sem_post(sem1);
         }
+        sem_close(&sem1);
+        sem_close(&sem2);
     }
     else {
         for (i = 0; i < 10; ++i) {
@@ -31,8 +33,10 @@ int main(int argc, char *argv[]) {
             printf("Parent %d\n", i);
             sem_post(sem2);
         }
+        sem_close(&sem1);
+        sem_close(&sem2);
+        sem_unlink(SNAME1);
+        sem_unlink(SNAME2);
     }
-    sem_unlink(SNAME1);
-    sem_unlink(SNAME2);
     return EXIT_SUCCESS;
 }
