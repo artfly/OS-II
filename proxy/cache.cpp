@@ -55,6 +55,7 @@ CacheEntry * Cache::get_entry(const std::string & url) const {
 	if (it == entries.end()) {
 		return NULL;
 	}
+	std::cout << "Getting entry from cache" << std::endl;
 	return it->second;
 }
 

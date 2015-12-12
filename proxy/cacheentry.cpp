@@ -4,7 +4,7 @@ CacheEntry::CacheEntry() : entry_count(0), finished(false) {}
 
 CacheEntry::~CacheEntry() {
 	for (size_t i = 0; i < chunks.size(); i++) {
-		std::cout << "i" << std::endl;
+		// std::cout << "i" << std::endl;
 		free(chunks[i].first);
 	}
 }
@@ -12,7 +12,7 @@ CacheEntry::~CacheEntry() {
 char * CacheEntry::get_data(size_t index) {
 	if (index >= chunks.size())
 		return NULL;
-	std::cout << "GET DATA FROM ENTRY : " << chunks[index].first << std::endl;
+	// std::cout << "GET DATA FROM ENTRY : " << chunks[index].first << std::endl;
 	return chunks[index].first;
 }
 
@@ -26,9 +26,9 @@ void CacheEntry::append_data(char * buffer, int len) {
 	char * copy = (char *) malloc(len);
 	memcpy(copy, buffer, len);
 	chunks.push_back(std::make_pair(copy, len));
-	std::cout << "DATA TO APPEND : " << std::endl;
-	write(1, chunks.back().first, len);
-	std::cout << '\n';
+	// std::cout << "DATA TO APPEND : " << std::endl;
+	// write(1, chunks.back().first, len);
+	// std::cout << '\n';
 }
 
 size_t CacheEntry::get_entry_count() const {

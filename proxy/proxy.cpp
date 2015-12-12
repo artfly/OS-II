@@ -106,7 +106,7 @@ void Proxy::remove_dead() {
 	for (int i = 1; i < poll_size; i++) {
 		it = clients.find(poll_list[i].fd);
 		if (it != clients.end() && !(it->second->alive())) {
-			std::cout << "CLIENT : " << i << std::endl;
+			// std::cout << "CLIENT : " << i << std::endl;
 			it_remote = clients.find(it->second->get_sock(poll_list[i].fd));
 			if (it_remote != clients.end())
 				clients.erase(it_remote);

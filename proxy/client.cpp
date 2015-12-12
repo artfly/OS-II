@@ -12,23 +12,23 @@ Client::Client(int sock) :  state(CONNECT_REMOTE), remote_state(WAIT),
 }
 
 Client::~Client() {
-	std::cout << "Close sock" << std::endl;
+	// std::cout << "Close sock" << std::endl;
 	delete client_conn;
-	std::cout << "Close sock" << std::endl;
+	// std::cout << "Close sock" << std::endl;
 	if (remote_conn)
 		delete remote_conn;
 	// if (entry && response_header->get_code() != response_header->OK_CODE) {
 	// 	std::cout << "Close sock" << std::endl;
 	// 	delete entry;
 	// }
-	std::cout << "Close sock" << std::endl;
+	// std::cout << "Close sock" << std::endl;
 	if (request_header) {
 		delete request_header;
 	}
 	if (response_header) {
 		delete response_header;
 	}
-	std::cout << "Close sock" << std::endl;
+	// std::cout << "Close sock" << std::endl;
 }
 
 int Client::work(short events, int sock) {
@@ -116,15 +116,15 @@ int Client::remote_work(short events) {
 
 		case READ_CONTENT:
 			if (events & POLLIN) {
-				std::cout << "Remote event POLLIN" << std::endl;
+				// std::cout << "Remote event POLLIN" << std::endl;
 				if (!read_remote_data()) {
-					std::cout << "SOCKET CLOSED" << std::endl;
+					// std::cout << "SOCKET CLOSED" << std::endl;
 					remote_state = EXIT_REMOTE;
 				}
 			}
 			if (events & POLLOUT) {
-				std::cout << "total : " << total << std::endl;
-				std::cout << "required : " << response_header->get_length() << std::endl;
+				// std::cout << "total : " << total << std::endl;
+				// std::cout << "required : " << response_header->get_length() << std::endl;
 				if (response_header->get_length() >= 0 && total >= response_header->get_length()) {
 					entry->set_finished();
 					if (response_header->get_code() == response_header->OK_CODE)
@@ -133,8 +133,8 @@ int Client::remote_work(short events) {
 				}
 				else if (response_header->get_length() < 0) {
 					char c;
-					if (recv(remote_conn->get_sock(), &c, 1, MSG_PEEK | MSG_DONTWAIT) <= 0) {
-						std::cout << "END CHECK" << std::endl;
+					if (recv(remote_conn->get_sock(), &c, 1, MSG_PEEK) <= 0) {
+						// std::cout << "END CHECK" << std::endl;
 						if (errno != EAGAIN) {
 							entry->set_finished();
 							if (response_header->get_code() == response_header->OK_CODE)
@@ -154,11 +154,11 @@ int Client::remote_work(short events) {
 
 bool Client::read_remote_header() {
 	if (remote_conn->recv_data() <= 0) {
-		std::cout << "WTF? Where is all the data." << std::endl;						//?!
+		// std::cout << "WTF? Where is all the data." << std::endl;						//?!
 		return false;
 	}
 	remote_conn->get_buffer()[7] = '0';													//?
-	std::cout << client_conn->get_sock() << remote_conn->get_buffer() << std::endl;
+	// std::cout << client_conn->get_sock() << remote_conn->get_buffer() << std::endl;
 	response_header = new ResponseHeader(remote_conn->get_buffer());
 	entry->append_data(remote_conn->get_buffer(), remote_conn->get_length());
 	total += remote_conn->get_length() - response_header->get_header_len();
@@ -183,7 +183,7 @@ void Client::connect_server() {
 	request_header = new RequestHeader(client_conn->get_buffer());
 	if (!request_header->check_header())
 		return;
-	std::cout << "REQUEST : " << request_header->get_data() << std::endl;
+	// std::cout << "REQUEST : " << request_header->get_data() << std::endl;
 	int s = 0;
 	sockaddr_in host_addr;
 	if ((s = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
@@ -192,6 +192,8 @@ void Client::connect_server() {
 	host_addr.sin_family = AF_INET;
 	if ((host_addr.sin_addr.s_addr = inet_addr(request_header->get_host().c_str())) == INADDR_NONE) {
 		struct hostent *hp;
+		std::cout << "Getting host by name" << std::endl;
+		std::cout << request_header->get_host() << std::endl;
 		if ((hp = gethostbyname(request_header->get_host().c_str())) == NULL) {
 			std::cerr << "error : get host by name error" << std::endl;
 			std::cerr << "host was " << request_header->get_host() << std::endl; 
