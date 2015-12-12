@@ -17,14 +17,16 @@ Client::~Client() {
 	std::cout << "Close sock" << std::endl;
 	if (remote_conn)
 		delete remote_conn;
+	// if (entry && response_header->get_code() != response_header->OK_CODE) {
+	// 	std::cout << "Close sock" << std::endl;
+	// 	delete entry;
+	// }
+	std::cout << "Close sock" << std::endl;
 	if (request_header) {
 		delete request_header;
 	}
 	if (response_header) {
 		delete response_header;
-	}
-	if (entry) {
-		delete entry;
 	}
 	std::cout << "Close sock" << std::endl;
 }
@@ -115,17 +117,31 @@ int Client::remote_work(short events) {
 		case READ_CONTENT:
 			if (events & POLLIN) {
 				std::cout << "Remote event POLLIN" << std::endl;
-				if (!read_remote_data())
+				if (!read_remote_data()) {
+					std::cout << "SOCKET CLOSED" << std::endl;
 					remote_state = EXIT_REMOTE;
+				}
 			}
 			if (events & POLLOUT) {
 				std::cout << "total : " << total << std::endl;
 				std::cout << "required : " << response_header->get_length() << std::endl;
-				if (total > 0 && total >= response_header->get_length()) {
+				if (response_header->get_length() >= 0 && total >= response_header->get_length()) {
 					entry->set_finished();
 					if (response_header->get_code() == response_header->OK_CODE)
 						cache->put_entry(request_header->get_url(), entry);
 					remote_state = EXIT_REMOTE;
+				}
+				else if (response_header->get_length() < 0) {
+					char c;
+					if (recv(remote_conn->get_sock(), &c, 1, MSG_PEEK | MSG_DONTWAIT) <= 0) {
+						std::cout << "END CHECK" << std::endl;
+						if (errno != EAGAIN) {
+							entry->set_finished();
+							if (response_header->get_code() == response_header->OK_CODE)
+								cache->put_entry(request_header->get_url(), entry);
+							remote_state = EXIT_REMOTE;
+						}
+					}
 				}
 			}
 		break;
@@ -151,7 +167,6 @@ bool Client::read_remote_header() {
 
 bool Client::read_remote_data() {
 	if (remote_conn->recv_data() < 0) {										//?
-		std::cout << "FINiSH" << std::endl;
 		entry->set_finished();
 		if (response_header->get_code() == response_header->OK_CODE)
 			cache->put_entry(request_header->get_url(), entry);

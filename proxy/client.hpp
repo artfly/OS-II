@@ -12,6 +12,7 @@
 #include <iostream>
 #include <string.h>
 #include <netdb.h>
+#include <errno.h>
 
 
 enum ClientState {

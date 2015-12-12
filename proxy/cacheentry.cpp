@@ -4,6 +4,7 @@ CacheEntry::CacheEntry() : entry_count(0), finished(false) {}
 
 CacheEntry::~CacheEntry() {
 	for (size_t i = 0; i < chunks.size(); i++) {
+		std::cout << "i" << std::endl;
 		free(chunks[i].first);
 	}
 }
