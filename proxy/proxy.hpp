@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <poll.h>
+#include <errno.h>
 #include <map>
 #include "client.hpp"
 
@@ -16,6 +17,9 @@ class Proxy {
 	Proxy(int port);
 	~Proxy();
 	void run();
+ 	void say_hi();
+ 	void remove_from_poll(int sock); 
+ 	void add_to_poll(int socket, Client * client, int mode);
  private:
  	const static int BACKLOG = 50;
  	const static int MAX_CLIENTS = 256;
@@ -28,7 +32,6 @@ class Proxy {
 	int init_socket(int port);
  	void add_proxy();
  	void add_client();
- 	void add_to_poll(int socket, Client * client);
  	void remove_dead();
 };
 

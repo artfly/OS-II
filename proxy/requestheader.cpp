@@ -20,10 +20,14 @@ const std::string RequestHeader::MESSAGE_414 = "HTTP/1.0 414 Request-URL Too Lon
 const std::string RequestHeader::MESSAGE_500 = "HTTP/1.0 500 Internal Server Error\r\n\
 \r\n<html><head><title>500 Internal Server Error</title></head> \
 <body><h2>500 Internal Server Error</h2></body></html>\r\n";
+const std::string RequestHeader::MESSAGE_404 = "HTTP/1.0 404 Server not found\r\n\
+\r\n<html><head><title>404 Server not found</title></head> \
+<body><h2>404 Server not found</h2></body></html>\r\n";
 
 
 RequestHeader::RequestHeader(std::string data) : data(data), error(false) {
 	std::stringstream ss(data);
+	std::cout << data << std::endl;
 	ss >> method >> url >> version;
 	protocol = url.substr(0, url.find("://"));
 	url = url.substr(url.find("://") + 3, url.length());

@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <stdlib.h>
 #include <cctype>
+#include <iostream>
 
 class RequestHeader {
  public:
@@ -33,6 +34,8 @@ class RequestHeader {
  	static const std::string MESSAGE_414;
  	static const std::string MESSAGE_500;
  	static const std::string MESSAGE_405;
+ 	static const std::string MESSAGE_404;
+
 
  	void parse_url();
 

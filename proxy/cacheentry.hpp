@@ -11,6 +11,8 @@
 #include <unistd.h>
 #include <utility>
 
+class Cache;
+
 class CacheEntry {
 public:
 	CacheEntry();
@@ -19,6 +21,7 @@ public:
 	char * get_data(size_t index);
 	void append_data( char * buffer, int length);
 	size_t get_length(size_t index) const;
+	size_t get_full_length() const;
 	size_t get_total() const;
 
 	size_t get_entry_count() const;
@@ -26,10 +29,17 @@ public:
 
 	bool is_finished() const;
 	void set_finished();
+	void set_cache(Cache * cache);
+	void add_reader();
+	void remove_reader();
+	bool is_used() const;
 private:
 	std::vector< std::pair<char *, int> > chunks;
+
+	Cache * cache;
 	size_t entry_count;
 	bool finished;
+	int readers;
 };
 
 #endif

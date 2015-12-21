@@ -25,11 +25,14 @@ class Connection {
 	void close_sock();
 	void set_sock(int s);
 	int get_sock() const;
+	void set_connecting(bool conn);
+	bool is_connecting() const;
  private:
  	static const int BUFLEN = 65536;
  	int len;
  	char * buffer;
  	int sock;
+ 	bool connecting;
  	// std::vector< std::pair<char *, int> > chunks;
 };
 

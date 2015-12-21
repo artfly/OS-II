@@ -51,21 +51,23 @@ void Proxy::add_proxy() {
 void Proxy::run() {
 	std::cout << "Proxy is up and running" << std::endl;
 	while(1) {
+		// std::cout << "DEBUG : waiting events " << std::endl;
 		if (poll(poll_list, poll_size, -1) < 0) {
 			std::cerr << "eror : poll error" << std::endl;
 			continue;
 		}
+		// std::cout << "DEBUG : poll state :" << std::endl;
 		for (int i = 1; i < poll_size; i++) {
 			pollfd element = poll_list[i];
+			// std::cout << element.fd << " ";
 			if (element.fd < 0)
 				continue;
 			Client * cur_client = clients[element.fd];
 			if (element.revents) {
-				// std::cout << "alive : " << element.fd << std::endl;
-				add_to_poll(cur_client->work(element.revents, element.fd), cur_client);
+				cur_client->work(element.revents, element.fd);
 			}
 		}
-
+		// std::cout << "\n";
 		if (poll_list[0].revents && POLLIN) {
 			add_client();
 		}
@@ -75,27 +77,42 @@ void Proxy::run() {
 
 void Proxy::add_client() {
 	struct sockaddr_in client_addr;
-	socklen_t addr_size;
+	int addr_size = sizeof((struct sockaddr *) &client_addr);
 	int client_sock;
-	if ((client_sock = accept(proxy_socket, (struct sockaddr*)&client_addr, &addr_size)) < 0) {
-		std::cerr << "error : could not add client" << std::endl;
+	if ((client_sock = accept(proxy_socket, (struct sockaddr*)&client_addr, (socklen_t *)&addr_size)) < 0) {
+		std::cerr << "error : could not add client, errno : " << errno << std::endl;
 		return;
 	}
 	std::cout << "connection from client" << client_sock << std::endl;
-	add_to_poll(client_sock, new Client(client_sock));
+	add_to_poll(client_sock, new Client(client_sock, this), POLLIN);
 }
 
-void Proxy::add_to_poll(int sock, Client * client) {
-	if (sock) {
-		for (int i = 1; i < MAX_CLIENTS; i++) {
-			if (poll_list[i].fd <= 0) {
-				poll_list[i].fd = sock;
-				poll_list[i].events = POLLIN | POLLOUT;
-				if (i >= poll_size) poll_size++;
-				clients[sock] = client;
-				// std::cout << "DEBUG, size : " << poll_size << ", added to : " << i << "sock became " << poll_std::endl;
-				return;
-			}
+void Proxy::add_to_poll(int sock, Client * client, int mode) {
+	//change mode
+	for (int i = 1; i < poll_size; i++) {
+		if (poll_list[i].fd == sock) {
+			poll_list[i].events = mode;	
+			return;
+		}
+	}
+
+	//add new
+	for (int i = 1; i < MAX_CLIENTS; i++) {
+		if (poll_list[i].fd <= 0) {
+			poll_list[i].fd = sock;
+			poll_list[i].events = mode;
+			if (i >= poll_size) poll_size++;
+			clients[sock] = client;
+			return;
+		}
+	}
+}
+
+void Proxy::remove_from_poll(int sock) {
+	for (int i = 1; i < poll_size; i++) {
+		if (poll_list[i].fd == sock) {
+			poll_list[i].fd = -1;
+			return;
 		}
 	}
 }
@@ -106,7 +123,6 @@ void Proxy::remove_dead() {
 	for (int i = 1; i < poll_size; i++) {
 		it = clients.find(poll_list[i].fd);
 		if (it != clients.end() && !(it->second->alive())) {
-			// std::cout << "CLIENT : " << i << std::endl;
 			it_remote = clients.find(it->second->get_sock(poll_list[i].fd));
 			if (it_remote != clients.end())
 				clients.erase(it_remote);
@@ -118,4 +134,8 @@ void Proxy::remove_dead() {
 			poll_list[i].fd = -1;
 		}
 	}
+}
+
+void Proxy::say_hi() {
+	// std::cout << "Hi!" << std::endl;
 }

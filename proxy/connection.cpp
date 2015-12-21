@@ -1,6 +1,6 @@
 #include "connection.hpp"
 
-Connection::Connection(int sock) : len(0), sock(sock) {
+Connection::Connection(int sock) : len(0), sock(sock), connecting(false) {
 	buffer = (char *)calloc(1, BUFLEN);
 }
 
@@ -17,10 +17,6 @@ int Connection::recv_data() {
 
 int Connection::send_data(const char * data, int len) {
 	int sent = send(sock, data, len, 0);
-	// std::cout << "Required length to send : " << len << std::endl;
-	// std::cout << "DATA TO SEND : " << std::endl;
-	// write(1, data, len);
-	// std::cout << "Actually sent : " << sent << std::endl;
 	return sent;
 }
 
@@ -43,4 +39,12 @@ void Connection::set_sock(int s) {
 
 int Connection::get_length() const {
 	return len;
+}
+
+void Connection::set_connecting(bool conn) {
+	connecting = conn;
+}
+
+bool Connection::is_connecting() const {
+	return connecting;
 }

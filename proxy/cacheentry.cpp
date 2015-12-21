@@ -1,10 +1,10 @@
 #include "cacheentry.hpp"
+#include "cache.hpp"
 
-CacheEntry::CacheEntry() : entry_count(0), finished(false) {}
+CacheEntry::CacheEntry() : entry_count(0), finished(false), readers(1) {}
 
 CacheEntry::~CacheEntry() {
 	for (size_t i = 0; i < chunks.size(); i++) {
-		// std::cout << "i" << std::endl;
 		free(chunks[i].first);
 	}
 }
@@ -12,7 +12,6 @@ CacheEntry::~CacheEntry() {
 char * CacheEntry::get_data(size_t index) {
 	if (index >= chunks.size())
 		return NULL;
-	// std::cout << "GET DATA FROM ENTRY : " << chunks[index].first << std::endl;
 	return chunks[index].first;
 }
 
@@ -22,13 +21,19 @@ size_t CacheEntry::get_length(size_t index) const {
 	return chunks[index].second;
 }
 
+size_t CacheEntry::get_full_length() const {
+	size_t full = 0;
+	for (size_t i = 0; i < chunks.size(); i++) {
+		full += chunks[i].second;
+	}
+	return full;
+}
+
 void CacheEntry::append_data(char * buffer, int len) {
 	char * copy = (char *) malloc(len);
 	memcpy(copy, buffer, len);
 	chunks.push_back(std::make_pair(copy, len));
-	// std::cout << "DATA TO APPEND : " << std::endl;
-	// write(1, chunks.back().first, len);
-	// std::cout << '\n';
+	Cache::get_instance()->increase_size(len);
 }
 
 size_t CacheEntry::get_entry_count() const {
@@ -49,4 +54,20 @@ void CacheEntry::set_finished() {
 
 size_t CacheEntry::get_total() const {
 	return chunks.size();
+}
+
+void CacheEntry::set_cache(Cache * cache) {
+	this->cache = cache;
+}
+
+void CacheEntry::add_reader() {
+	readers++;
+}
+
+void CacheEntry::remove_reader() {
+	readers--;
+}
+
+bool CacheEntry::is_used() const {
+	return readers != 0;
 }
