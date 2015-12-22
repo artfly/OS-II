@@ -1,13 +1,23 @@
 #include "proxy.hpp"
 
+pthread_mutex_t Proxy::proxy_mutex;
+pthread_cond_t Proxy::proxy_cond;
+int Proxy::threads_num;
+
 Proxy::Proxy(int port) : proxy_socket(-1), poll_size(0) {
 	proxy_socket = init_socket(port);
 	add_proxy();
+	threads_num = 0;
+	pthread_mutexattr_t attr;
+    pthread_mutexattr_init(&attr);
+    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
+    pthread_mutex_init(&proxy_mutex, &attr);
+    pthread_cond_init(&proxy_cond, NULL);
 }
 
 Proxy::~Proxy() {
 	close(proxy_socket);
-	// clients.clear();
+	Cache::reset_instance();
 }
 
 
@@ -51,30 +61,15 @@ void Proxy::add_proxy() {
 
 void Proxy::run() {
 	std::cout << "Proxy is up and running" << std::endl;
-	Mutex * mutex = Mutex::get_instance();
 	while(1) {
 		if (poll(poll_list, poll_size, -1) < 0) {
 			std::cerr << "eror : poll error" << std::endl;
 			continue;
 		}
-		// for (int i = 1; i < poll_size; i++) {
-		// 	pollfd element = poll_list[i];
-		// 	if (element.fd < 0)
-		// 		continue;
-		// 	Client * cur_client = clients[element.fd];
-		// 	if (element.revents) {
-		// 		// std::cout << "alive : " << element.fd << std::endl;
-		// 		add_to_poll(cur_client->work(element.revents, element.fd), cur_client);
-		// 	}
-		// }
 
 		if (poll_list[0].revents && POLLIN) {
-			pthread_mutex_t * smutex = mutex->get_socket_mutex();
-			pthread_mutex_lock(smutex);
 			add_client();
-			pthread_mutex_unlock(smutex);
 		}
-		// remove_dead();	
 	}
 }
 
@@ -86,7 +81,7 @@ void Proxy::add_client() {
 		std::cerr << "error : could not add client" << std::endl;
 		return;
 	}
-	std::cout << "connection from client" << client_sock << std::endl;
+	// std::cout << "connection from client" << client_sock << std::endl;
 	Client * client = new Client(client_sock);
 
 	pthread_t thread;
@@ -95,51 +90,26 @@ void Proxy::add_client() {
 
     pthread_attr_init(&attr);
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-    while ((code = pthread_create(&thread, &attr, &Proxy::client_body, (void *)client)) != 0) {}
+
+	pthread_mutex_lock(&proxy_mutex);
+	while (threads_num == MAX_THREADS_NUM)
+		pthread_cond_wait(&proxy_cond, &proxy_mutex);
+    code = pthread_create(&thread, &attr, &Proxy::client_body, (void *)client);
+    threads_num++;
+    // std::cout << "DEBUG : threads_num = " << threads_num << std::endl;
+    pthread_mutex_unlock(&proxy_mutex);
 }
 
 void * Proxy::client_body(void * param) {
 	Client * client = (Client *)param;
 	client->run();
-	Mutex * mutex = Mutex::get_instance();
-	pthread_mutex_t * smutex = mutex->get_socket_mutex();
-	pthread_mutex_lock(smutex);
 	delete client;
-	pthread_mutex_unlock(smutex);
-	std::cout << "END OF THREAD" << std::endl;
+	// std::cout << "END OF THREAD" << std::endl;
+	//cond signal
+	pthread_mutex_lock(&proxy_mutex);
+	threads_num--;
+	// std::cout << "DEBUG : threads_num = " << threads_num << std::endl;
+	pthread_cond_signal(&proxy_cond);
+	pthread_mutex_unlock(&proxy_mutex);
 	return NULL;
 }
-
-// void Proxy::add_to_poll(int sock, Client * client) {
-// 	if (sock) {
-// 		for (int i = 1; i < MAX_CLIENTS; i++) {
-// 			if (poll_list[i].fd <= 0) {
-// 				poll_list[i].fd = sock;
-// 				poll_list[i].events = POLLIN | POLLOUT;
-// 				if (i >= poll_size) poll_size++;
-// 				clients[sock] = client;
-// 				// std::cout << "DEBUG, size : " << poll_size << ", added to : " << i << "sock became " << poll_std::endl;
-// 				return;
-// 			}
-// 		}
-// 	}
-// }
-
-// void Proxy::remove_dead() {
-// 	std::map<int, Client *>::iterator it;
-// 	std::map<int, Client *>::iterator it_remote;
-// 	for (int i = 1; i < poll_size; i++) {
-// 		it = clients.find(poll_list[i].fd);
-// 		if (it != clients.end() && !(it->second->alive())) {
-// 			it_remote = clients.find(it->second->get_sock(poll_list[i].fd));
-// 			if (it_remote != clients.end())
-// 				clients.erase(it_remote);
-// 			delete it->second;
-// 			clients.erase(it);
-// 			poll_list[i].fd = -1;
-// 		}
-// 		else if (it == clients.end()) {
-// 			poll_list[i].fd = -1;
-// 		}
-// 	}
-// }

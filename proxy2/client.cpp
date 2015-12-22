@@ -6,7 +6,6 @@ Client::Client(int sock) :  poll_size(2), state(CONNECT_REMOTE), remote_state(WA
 	client_conn = new Connection(sock);
 	remote_conn = NULL;
 	cache = Cache::get_instance();
-	// entry = new CacheEntry;
 	request_header = NULL;
 	response_header = NULL;
 	create_poll();
@@ -14,30 +13,27 @@ Client::Client(int sock) :  poll_size(2), state(CONNECT_REMOTE), remote_state(WA
 
 void Client::create_poll() {
 	memset(poll_list, -1 , sizeof(poll_list));
-	poll_list[0].fd = client_conn->get_sock();
-	poll_list[0].events = POLLIN | POLLOUT;
+	add_to_poll(client_conn->get_sock(), POLLIN);
 	poll_size = 2;
 }
 
 Client::~Client() {
-	// std::cout << "Close sock" << std::endl;
+	// std::cout << "DEBUG : destructor for " << client_conn->get_sock() <<std::endl;
 	delete client_conn;
-	// std::cout << "Close sock" << std::endl;
+	// std::cout << "DEBUG : dtor start" << std::endl;
+	//danger!!!
+	if (entry && remote_conn && response_header->get_code() != ResponseHeader::OK_CODE) {
+		delete entry;
+	}
+	// std::cout << "DEBUG : dtor ok?" << std::endl;
 	if (remote_conn)
 		delete remote_conn;
-	// if (entry && response_header->get_code() != response_header->OK_CODE) {
-	// 	std::cout << "Close sock" << std::endl;
-	// 	delete entry;
-	// }
-	// std::cout << "Close sock" << std::endl;
 	if (request_header) {
-		std::cout << "Got all data from " << request_header->get_url() << std::endl;
 		delete request_header;
 	}
 	if (response_header) {
 		delete response_header;
 	}
-	// std::cout << "Close sock" << std::endl;
 }
 
 void Client::run() {
@@ -49,31 +45,56 @@ void Client::run() {
 		for (int i = 0; i < poll_size; i++) {
 			pollfd element = poll_list[i];
 			if (element.revents) {
-				// printf("event from : %d\n", element.fd);
-				add_to_poll(work(element.revents, element.fd));
-			}
-			if (!alive()) {
-				return;
+				work(element.revents, element.fd);
 			}
 		}
-	}
-	//what next?
-}
-
-void Client::add_to_poll(int remote_sock) {
-	if (remote_sock) {
-		poll_list[1].fd = remote_sock;
-		poll_list[1].events = POLLIN | POLLOUT;
-		std::cout << "added server : " << remote_sock << std::endl;
+		if (!alive()) {
+			return;
+		}
 	}
 }
 
-int Client::work(short events, int sock) {
+void Client::add_to_poll(int sock, int mode) {
+	//change mode
+	for (int i = 0; i < 2; i++) {
+		if (poll_list[i].fd == sock) {
+			poll_list[i].events = mode;
+			return;
+		}
+	}
+
+	//add new
+	int index;
+	if (poll_list[0].fd <= 0)
+		index = 0;
+	else
+		index = 1;
+	poll_list[index].fd = sock;
+	poll_list[index].events = mode;
+}
+
+void Client::remove_from_poll(int sock) {
+	for (int i = 0; i < 2; i++) {
+		if (poll_list[i].fd == sock) {
+			poll_list[i].fd = -1;
+			return;
+		}
+	}
+}
+
+void Client::work(short events, int sock) {
 	if (client_conn->get_sock() == sock) {
-		return client_work(events);
+		// std::cout << "DEBUG : client work :" << client_conn->get_sock() << std::endl;
+		client_work(events);
+		// if (request_header)
+		// 	std::cout << request_header->get_url() << std::endl;
 	}
 	else if (remote_conn && remote_conn->get_sock() == sock) {
-		return remote_work(events);
+		// std::cout << "DEBUG : server work" << std::endl;
+		remote_work(events);
+		// std::cout << "DEBUG : states after : " << std::endl;
+		// std::cout << state << " " << remote_state << std::endl;
+		// std::cout << "DEBUG : url " << request_header->get_url() << std::endl;
 	}
 	else {
 		std::cerr << "Exception!";
@@ -81,195 +102,267 @@ int Client::work(short events, int sock) {
 	}
 }
 
-int Client::client_work(short events) {
+void Client::client_work(short events) {
+	// std::cout << "DEBUG : states " << state << " " << remote_state << " sock : " << client_conn->get_sock() <<  std::endl;
+	// std::cout << "DEBUG : poll : " << poll_list[0].fd << " " << poll_list[0].events << std::endl; 
+	// std::cout << "DEBUG : poll : " << poll_list[1].fd << " " << poll_list[1].events << std::endl; 
 	switch (state) {
-		case CONNECT_REMOTE:
-		 	if (events & POLLIN) {						
-		 		Mutex * mutex = Mutex::get_instance();
-		 		pthread_mutex_t * smutex = mutex->get_socket_mutex();
-				pthread_mutex_lock(smutex);
-		 		connect_server();
-				pthread_mutex_unlock(smutex);
-		 	}
-		 	else if (remote_conn) {
-		 		if (!request_header->check_header()) {
-		 			std::string msg = request_header->get_error_msg();
-					client_conn->send_data(msg.c_str(), msg.size());
-					state = EXIT_CLIENT;
-		 		}
-		 		else {
-		 			entry = cache->get_entry(request_header->get_url());
-		 			state = READ_CACHE;
-		 			if (!entry) {
-		 				entry = new CacheEntry();
-		 				remote_state = READ_HEADER;
-		 				return remote_conn->get_sock();
-		 			}
-		 		}
-		 	}
-		break;
+		case CONNECT_REMOTE: {
+			connect_server();
+			break;
+		}
+		case READ_CACHE: {
+			if (!remote_conn) {
+				// std::cout << "DEBUG : getting emutex, sock : " << client_conn->get_sock() << std::endl;
+			}
+			pthread_mutex_t * emutex = entry->get_entry_mutex();
+			pthread_mutex_lock(emutex);
+			if (!remote_conn) {
+				// std::cout << "DEBUG : aquired mutex, sock : " << client_conn->get_sock() << std::endl;
+			}
+			const char * chunk = entry->get_data(chunk_to_read);
+	 		int chunk_len = entry->get_length(chunk_to_read);
+	 		bool finished = entry->is_finished();
 
-		case READ_CACHE:
-		 	if (events & POLLOUT) {
-		 		char * chunk = (char *)malloc(entry->get_length(chunk_to_read));
-		 		entry->get_data(chunk_to_read, chunk);
-		 		int chunk_len = entry->get_length(chunk_to_read);
-		 		if (!entry->get_length(chunk_to_read) && entry->is_finished()) {
-		 			state = EXIT_CLIENT;
-		 		}
-		 		else if (entry->get_length(chunk_to_read)) {
-		 			// std::cout << "SENDING CHUNK : " << std::endl;
-		 			// std::cout << "CHUNK NUM" << chunk_to_read << std::endl;
-		 			// std::cout << "CLIENT IS " << client_conn->get_sock() << std::endl;
-		 			// std::cout << "REQUEST WAS" << request_header->get_url() << std::endl;
-		 			// write(1, chunk, chunk_len);
-		 			// std::cout << "\n";
-		 			int sent = client_conn->send_data(chunk, chunk_len);
-		 			if (sent >= 0) {
-		 				chunk_to_read++;								//?
-		 				// std::cout << "CHUNK SENT" << std::endl;
-		 				free(chunk);
-		 			}
-		 			// if (chunk_to_read != 0)
-		 			// 	total += sent;
-		 			// std::cout << "Sent total " << total << " to " << client_conn->get_sock() << std::endl;
-		 		}
-		 	}
-		break;
+	 		//client without remote waits for signal
+	 		if (!remote_conn && !chunk && !finished) {
+	 			std::cout << "cond start" << std::endl;
+	 			pthread_cond_t * econd = entry->get_entry_cond();
+	 			pthread_cond_wait(econd, emutex);
+	 			chunk = entry->get_data(chunk_to_read);
+		 		chunk_len = entry->get_length(chunk_to_read);
+		 		finished = entry->is_finished();
+		 		std::cout << "cond end" << std::endl;
+	 		}
 
-		case EXIT_CLIENT:
+	 		if (!remote_conn) {
+				// std::cout << "DEBUG : chunk and finished state, sock : " << client_conn->get_sock() << std::endl;
+				// std::cout << chunk_len << " " << finished << std::endl;
+			}
+
+	 		//finish
+	 		if (!chunk && finished) {
+	 			pthread_mutex_t * rmutex = entry->get_readers_mutex();
+	 			// std::cout << "DEBUG : let me guess. Sigfault?" << std::endl;
+	 			entry->remove_reader();
+	 			std::cout << "DEBUG : zero readers? " << !entry->is_used() << std::endl;
+	 			std::cout << "DEBUG : url : " << request_header->get_url() << std::endl;
+	 			pthread_mutex_unlock(rmutex);
+	 			pthread_mutex_unlock(emutex);
+	 			// std::cout << "DEBUG : client finished. url : " << request_header->get_url() << std::endl;
+	 			state = EXIT_CLIENT;
+	 			break;
+	 		}
+		 	pthread_mutex_unlock(emutex);
+	 		//normal work
+	 		if (chunk) {
+	 			int sent = client_conn->send_data(chunk, chunk_len);
+	 			if (sent >= 0) {
+	 				chunk_to_read++;								
+	 			}
+	 			else {
+	 				std::cout << "OMG OMG OMG OMG OMG" << std::endl;
+	 				state = EXIT_CLIENT;
+	 			}
+	 		}
+	 		//client without remote waits for signal
+		 	if (remote_state != EXIT_REMOTE && state != EXIT_CLIENT && remote_conn) {
+		 		// std::cout << "DEBUG : client removes himself from poll " << std::endl;
+		 		remove_from_poll(client_conn->get_sock());
+		 	}
+			break;
+		}
+		case SEND_ERROR: {
+			std::string msg = request_header->get_error_msg();
+			client_conn->send_data(msg.c_str(), msg.size());
+			state = EXIT_CLIENT;
+			break;
+		}
+		case EXIT_CLIENT: {
 			std::cout << "Client bye-bye!" << std::endl;
+		}
 	}
-	return 0;
 }
 
 
-int Client::remote_work(short events) {
+void Client::remote_work(short events) {
+	// std::cout << "DEBUG : states " << state << " " << remote_state << std::endl;
+	// std::cout << "DEBUG : revents on remote " << events << std::endl;
 	switch (remote_state) {
-		case WAIT:
-		break;
-		case READ_HEADER:
-			if (events & POLLOUT) {
-				if (requested_header <= 0) {
-					requested_header = remote_conn->send_data(client_conn->get_buffer(),
-																	 client_conn->get_length());
-				}
-				// if (remote_conn->send_data(client_conn->get_buffer(), client_conn->get_length()) < 0)
-				// 	remote_state = EXIT_REMOTE;
+		case WAIT: {
+			break;
+		}
+		case REQUEST_HEADER: {
+			//check for errors during connect
+			int error = 0;
+			socklen_t len = sizeof(error);
+			getsockopt(remote_conn->get_sock(), SOL_SOCKET, SO_ERROR, &error, &len);	
+			if (error) {
+				std::cerr << "error : server connect error" << std::endl;
+				state = EXIT_CLIENT;
 			}
+			//send client request and wait for response
+			remote_conn->send_data(client_conn->get_buffer(), client_conn->get_length());
+			add_to_poll(remote_conn->get_sock(), POLLIN);
+			// std::cout << "DEBUG : sent request header" << std::endl;
+			remote_state = READ_HEADER;
+			break;
+		}
+		case READ_HEADER: {
+			if (!read_remote_header())
+				break;
+			state = READ_CACHE;
+			remote_state = READ_CONTENT;
+			add_to_poll(client_conn->get_sock(), POLLOUT);
+			add_to_poll(remote_conn->get_sock(), POLLIN|POLLOUT);
+			break;
+		}
+		case READ_CONTENT: {
 			if (events & POLLIN) {
-				if (read_remote_header()) {
-					remote_state = READ_CONTENT;
-				}
-			} 
-		break;
-
-		case READ_CONTENT:
-			if (events & POLLIN) {
-				// std::cout << "Remote event POLLIN" << std::endl;
+				// std::cout << "DEBUG : remote get data" << std::endl;
 				if (!read_remote_data()) {
-					// std::cout << "SOCKET CLOSED" << std::endl;
-					remote_state = EXIT_REMOTE;
+					break;
 				}
+				add_to_poll(client_conn->get_sock(), POLLOUT);
+				add_to_poll(remote_conn->get_sock(), POLLIN|POLLOUT);			//?
 			}
 			if (events & POLLOUT) {
-				// std::cout << "total : " << total << std::endl;
-				// std::cout << "required : " << response_header->get_length() << std::endl;
 				if (response_header->get_length() >= 0 && total >= response_header->get_length()) {
+					pthread_mutex_t * emutex = entry->get_entry_mutex();
+					pthread_cond_t * econd = entry->get_entry_cond();
+					pthread_mutex_lock(emutex);
 					entry->set_finished();
-					if (response_header->get_code() == response_header->OK_CODE) {
-						pthread_mutex_t * cmutex = Mutex::get_instance()->get_cache_mutex();
-						pthread_mutex_lock(cmutex);
-						cache->put_entry(request_header->get_url(), entry);
-						pthread_mutex_unlock(cmutex);
-					}
+					pthread_cond_signal(econd);
+					pthread_mutex_unlock(emutex);
+					remove_from_poll(remote_conn->get_sock());								//TEST, ADD TO 1 IF OK
+					add_to_poll(client_conn->get_sock(), POLLOUT);
 					remote_state = EXIT_REMOTE;
 				}
-				else if (response_header->get_length() < 0) {
-					char c;
-					// std::cout << "END CHECK" << std::endl;
-					if (recv(remote_conn->get_sock(), &c, 1, MSG_PEEK) <= 0) {
-						// std::cout << "TIME TO DIE?" << std::endl;
-						if (errno != EAGAIN) {
-							entry->set_finished();
-							// std::cout << "YEAH, IT'S TIME" << std::endl;
-							if (response_header->get_code() == response_header->OK_CODE) {
-								// std::cout << "HEADER CODE " << std::endl;
-								pthread_mutex_t * cmutex = Mutex::get_instance()->get_cache_mutex();
-								pthread_mutex_lock(cmutex);
-								Cache::get_instance()->put_entry(request_header->get_url(), entry);
-								// std::cout << "ADDED ENTRY " << std::endl;
-								pthread_mutex_unlock(cmutex);
-							}
-							remote_state = EXIT_REMOTE;
-						}
-					}
-					// std::cout << "NOT TIME TO DIE" << std::endl;
+				else {															//? for no length and early try
+					add_to_poll(remote_conn->get_sock(), POLLIN);
 				}
 			}
-		break;
+			break;
+		}
+		case EXIT_REMOTE: {
+			remove_from_poll(remote_conn->get_sock());								//TEST, ADD TO 1 IF OK
+			add_to_poll(client_conn->get_sock(), POLLOUT);
+			// std::cout << "Server bye-bye!" << std::endl;
+			break;
+		}
 
-		case EXIT_REMOTE:
-			std::cout << "Server bye-bye!" << std::endl;
 	}
-	return 0;
 }
 
 bool Client::read_remote_header() {
 	if (remote_conn->recv_data() <= 0) {
-		// std::cout << "WTF? Where is all the data." << std::endl;						//?!
+		state = EXIT_CLIENT;
 		return false;
 	}
-	remote_conn->get_buffer()[7] = '0';													//?
-	// std::cout << client_conn->get_sock() << remote_conn->get_buffer() << std::endl;
+	// remote_conn->get_buffer()[7] = '0';	
 	response_header = new ResponseHeader(remote_conn->get_buffer());
+	//create entry and decide if local
+	// std::cout << "DEBUG : creating new entry" << std::endl;
+	pthread_mutex_t * cmutex = cache->get_cache_mutex();
+	pthread_mutex_lock(cmutex);
+	entry = cache->get_entry(request_header->get_url());
+	//someone else added connection. start cache read.
+	if (entry) {
+		remove_from_poll(remote_conn->get_sock());
+		delete remote_conn;
+		state = READ_CACHE;
+		add_to_poll(client_conn->get_sock(), POLLOUT);
+		pthread_mutex_t * rmutex = entry->get_readers_mutex();
+		pthread_mutex_lock(rmutex);
+		entry->add_reader();
+		pthread_mutex_unlock(rmutex);
+		pthread_mutex_unlock(cmutex);
+		return false;
+	}
+	//new entry
+	entry = new CacheEntry();		
+	if (response_header->get_code() == response_header->OK_CODE)
+		cache->put_entry(request_header->get_url(), entry);			
+	// std::cout << "DEBUG : adding new data to entry" << std::endl;					
+	pthread_mutex_unlock(cmutex);
+	pthread_mutex_t * emutex = entry->get_entry_mutex();
+	pthread_cond_t * econd = entry->get_entry_cond();
+	pthread_mutex_lock(emutex);
 	entry->append_data(remote_conn->get_buffer(), remote_conn->get_length());
+	pthread_cond_signal(econd);
+	pthread_mutex_unlock(emutex);
+	// std::cout << "DEBUG : added new data to entry" << std::endl;					
 	total += remote_conn->get_length() - response_header->get_header_len();
 	return true;
 }
 
 bool Client::read_remote_data() {
-	if (remote_conn->recv_data() < 0) {										//?
+	int recv_bytes;
+	pthread_mutex_t * emutex = entry->get_entry_mutex();
+	pthread_cond_t * econd = entry->get_entry_cond();
+	pthread_mutex_lock(emutex);
+	if ((recv_bytes = remote_conn->recv_data()) <= 0) {
 		entry->set_finished();
-		if (response_header->get_code() == response_header->OK_CODE) {
-			pthread_mutex_t * cmutex = Mutex::get_instance()->get_cache_mutex();
-			pthread_mutex_lock(cmutex);
-			cache->put_entry(request_header->get_url(), entry);
-			pthread_mutex_unlock(cmutex);
-		}
+		pthread_cond_signal(econd);
+		pthread_mutex_unlock(emutex);
+		remove_from_poll(remote_conn->get_sock());								//TEST, ADD TO 1 IF OK
+		add_to_poll(client_conn->get_sock(), POLLOUT);
+		remote_state = EXIT_REMOTE;
 		return false;
 	}
 	entry->append_data(remote_conn->get_buffer(), remote_conn->get_length());
+	pthread_cond_signal(econd);
+	pthread_mutex_unlock(emutex);
 	total += remote_conn->get_length();
 	return true;
 }
 
 void Client::connect_server() {
-	if (client_conn->recv_data() <= 0) {											//?
-		// std::cout << "No data from client during server connect" << std::endl;
-		// state = EXIT_CLIENT;
+	//smth went wrong, abort
+	if (client_conn->recv_data() <= 0) {	
+		state = EXIT_CLIENT;									
 		return;
 	}
 	request_header = new RequestHeader(client_conn->get_buffer());
+	//invalid header
 	if (!request_header->check_header()) {
-		std::cout << "Wrong header : " << request_header->get_data() << std::endl;
+		add_to_poll(client_conn->get_sock(), POLLOUT);
+		state = SEND_ERROR;
 		return;
 	}
-	// std::cout << "REQUEST : " << request_header->get_data() << std::endl;
+	//check for cache entry
+	// std::cout << "DEBUG : getting entry" << std::endl;
+	pthread_mutex_t * cmutex = cache->get_cache_mutex();
+	// std::cout << "DEBUG : getting cmutex" << std::endl;
+	pthread_mutex_lock(cmutex);
+	// std::cout << "DEBUG : got cmutex. wow." << std::endl;
+	entry = cache->get_entry(request_header->get_url());
+	if (entry) {
+		pthread_mutex_t * rmutex = entry->get_readers_mutex();
+		pthread_mutex_lock(rmutex);
+		entry->add_reader();
+		pthread_mutex_unlock(rmutex);
+		add_to_poll(client_conn->get_sock(), POLLOUT);
+		state = READ_CACHE;
+		pthread_mutex_unlock(cmutex);
+		return;
+	}
+	pthread_mutex_unlock(cmutex);
+
+	// std::cout << "DEBUG : connecting server" << std::endl;
+	//connect to server
 	int s = 0;
 	sockaddr_in host_addr;
-	if ((s = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+	if ((s = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0)) < 0) {
 		return;
 	}
 	host_addr.sin_family = AF_INET;
 	if ((host_addr.sin_addr.s_addr = inet_addr(request_header->get_host().c_str())) == INADDR_NONE) {
 		struct hostent *hp;
-		std::cout << "Resource : " << request_header->get_url() << std::endl;
-		std::cout << "Getting host by name" << std::endl;
-		std::cout << request_header->get_host() << std::endl;
+		// std::cout << "Getting host by name" << std::endl;
+		// std::cout << request_header->get_host() << std::endl;
 		if ((hp = gethostbyname(request_header->get_host().c_str())) == NULL) {
-			std::cerr << "error : get host by name error" << std::endl;
-			std::cerr << "host was " << request_header->get_host() << std::endl; 
+			std::cerr << "error : get host by name error" << std::endl; 
 			close(s);
 			s = -1;
 			return;
@@ -278,12 +371,27 @@ void Client::connect_server() {
 		memcpy(&(host_addr.sin_addr), hp->h_addr, hp->h_length);
 	}
 	host_addr.sin_port = htons(request_header->get_port());
-	if (connect(s, (struct sockaddr *)&host_addr, sizeof(host_addr)) < 0) {
+	// std::cout << "DEBUG : starting connect" << std::endl;
+	if (connect(s, (struct sockaddr *)&host_addr, sizeof(host_addr)) == 0) {
+		std::cout << "Сonnection established." << std::endl;
+		remote_conn = new Connection(s);
+		remove_from_poll(client_conn->get_sock());
+		add_to_poll(remote_conn->get_sock(), POLLOUT);
+		remote_state = REQUEST_HEADER;
+	}
+	else if (errno == EINPROGRESS) {
+		// std::cout << "Сonnection would be established." << std::endl;
+		remote_conn = new Connection(s);
+		add_to_poll(remote_conn->get_sock(), POLLOUT);
+		remove_from_poll(client_conn->get_sock());
+		remote_state = REQUEST_HEADER;
+		// std::cout << "Сonnection would be established." << std::endl;
+	}
+	else {
+		std::cout << "error : connection error" << std::endl;
 		close(s);
 		return;
 	}
-	remote_conn = new Connection(s);
-	std::cout << "Сonnection established, client " << client_conn->get_sock() << std::endl;
 }
 
 bool Client::alive() const {

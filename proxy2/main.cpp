@@ -21,6 +21,6 @@ int main(int argc, char ** argv) {
 	int port = atoi(argv[1]);
 	proxy = new Proxy(port);
 	proxy->run();
-	// delete proxy;
+	delete proxy;
 	exit(0);
 }

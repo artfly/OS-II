@@ -17,10 +17,6 @@ int Connection::recv_data() {
 
 int Connection::send_data(const char * data, int len) {
 	int sent = send(sock, data, len, 0);
-	// std::cout << "Required length to send : " << len << std::endl;
-	// std::cout << "DATA TO SEND : " << std::endl;
-	// write(1, data, len);
-	// std::cout << "Actually sent : " << sent << std::endl;
 	return sent;
 }
 

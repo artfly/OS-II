@@ -17,18 +17,18 @@
 
 
 enum ClientState {
-	CONNECT_REMOTE, READ_CACHE, EXIT_CLIENT
+	CONNECT_REMOTE, READ_CACHE, SEND_ERROR, EXIT_CLIENT
 };
 
 enum RemoteState {
-	 WAIT, READ_HEADER, READ_CONTENT, EXIT_REMOTE
+	 WAIT, REQUEST_HEADER, READ_HEADER, READ_CONTENT, EXIT_REMOTE
 };
 
 class Client {
  public:
 	Client(int sock);
 	~Client();
-	int work(short events, int socket);
+	void work(short events, int socket);
 	bool alive() const;
 	int get_sock(int sock) const;
 	void run();
@@ -37,7 +37,8 @@ class Client {
  	struct pollfd poll_list[MAX_CLIENTS];
  	int poll_size;
  	void create_poll();
- 	void add_to_poll(int remote_sock);
+ 	void add_to_poll(int sock, int mode);
+ 	void remove_from_poll(int sock);
 
  	ClientState state;
  	RemoteState remote_state;
@@ -48,10 +49,10 @@ class Client {
  	CacheEntry * entry;
  	Cache * cache;
 
-	int client_work(short events);
+	void client_work(short events);
 	void connect_server();
 
-	int remote_work(short events);
+	void remote_work(short events);
 	bool read_remote_header();
 	bool read_remote_data();
 
