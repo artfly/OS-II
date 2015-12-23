@@ -47,7 +47,7 @@ class Client {
 	void connect_server();
 
 	void remote_work(short events);
-	void read_remote_header();
+	bool read_remote_header();
 	bool read_remote_data();
 
  	Connection * client_conn;

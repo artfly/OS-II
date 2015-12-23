@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <utility>
+#include <ctime>
 
 class Cache;
 
@@ -33,6 +34,7 @@ public:
 	void add_reader();
 	void remove_reader();
 	bool is_used() const;
+	std::time_t get_timestamp() const;
 private:
 	std::vector< std::pair<char *, int> > chunks;
 
@@ -40,6 +42,7 @@ private:
 	size_t entry_count;
 	bool finished;
 	int readers;
+	std::time_t timestamp;
 };
 
 #endif

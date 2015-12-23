@@ -1,7 +1,9 @@
 #include "cacheentry.hpp"
 #include "cache.hpp"
 
-CacheEntry::CacheEntry() : entry_count(0), finished(false), readers(1) {}
+CacheEntry::CacheEntry() : entry_count(0), finished(false), readers(1) {
+	timestamp = std::time(NULL);
+}
 
 CacheEntry::~CacheEntry() {
 	for (size_t i = 0; i < chunks.size(); i++) {
@@ -61,6 +63,7 @@ void CacheEntry::set_cache(Cache * cache) {
 }
 
 void CacheEntry::add_reader() {
+	timestamp = std::time(NULL);
 	readers++;
 }
 
@@ -70,4 +73,8 @@ void CacheEntry::remove_reader() {
 
 bool CacheEntry::is_used() const {
 	return readers != 0;
+}
+
+std::time_t CacheEntry::get_timestamp() const {
+	return timestamp;
 }

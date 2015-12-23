@@ -27,7 +27,7 @@ const std::string RequestHeader::MESSAGE_404 = "HTTP/1.0 404 Server not found\r\
 
 RequestHeader::RequestHeader(std::string data) : data(data), error(false) {
 	std::stringstream ss(data);
-	std::cout << data << std::endl;
+	// std::cout << data << std::endl;
 	ss >> method >> url >> version;
 	protocol = url.substr(0, url.find("://"));
 	url = url.substr(url.find("://") + 3, url.length());

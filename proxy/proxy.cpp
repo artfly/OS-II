@@ -8,6 +8,7 @@ Proxy::Proxy(int port) : proxy_socket(-1), poll_size(0) {
 Proxy::~Proxy() {
 	close(proxy_socket);
 	clients.clear();
+	Cache::reset_instance();
 }
 
 int Proxy::init_socket(int port) {

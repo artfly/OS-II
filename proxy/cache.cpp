@@ -1,14 +1,25 @@
 #include "cache.hpp"
 
 Cache *Cache::instance = NULL;
+int Cache::MAX_CACHE_SIZE;
+int Cache::REMOVE_SIZE;
 
-Cache::Cache() : cur_size(0) {}
+Cache::Cache() : cur_size(0) {
+	MAX_CACHE_SIZE = 4000000;
+	REMOVE_SIZE = 400000;
+}
 
 Cache::~Cache() {
 	std::map<std::string, CacheEntry *>::iterator it = entries.begin();
-  	while (it != entries.end()) {
+  	for (it = entries.begin(); it != entries.end(); ++it) {
+  		// std::cout << "DEBUG : deleting url : " << it->first << std::endl;
   		delete it->second;
   	}
+}
+
+void Cache::reset_instance() {
+	delete instance;
+	instance = NULL;
 }
 
 Cache * Cache::get_instance() {
@@ -30,14 +41,17 @@ void Cache::remove_oldest() {
 	std::map<std::string, CacheEntry *>::iterator it;
 	int removed = 0;
 	for (it = entries.begin(); it != entries.end(); ++it) {
-		if (removed >= REMOVE_SIZE)
+		if (removed >= REMOVE_SIZE) {
+			cur_size -= removed;
 			return;
+		}
 		if (!it->second->is_used()) {
 			removed += it->second->get_full_length();
 			delete it->second;
 			entries.erase(it->first);
 		}
 	}
+	cur_size -= removed;
 	// while (it != entries.end()) {
 
 	// 	if (oldest.size() < 10) {
@@ -70,14 +84,14 @@ CacheEntry * Cache::get_entry(const std::string & url) const {
 }
 
 void Cache::increase_size(int size) {
-	std::cout << "DEBUG : adding cur_size : " << cur_size << std::endl;
+	// std::cout << "DEBUG : adding cur_size : " << cur_size << std::endl;
 	// Cache::get_instance();
 	cur_size += size;
-	std::cout << "DEBUG : adding cur_size" << std::endl;
+	// std::cout << "DEBUG : adding cur_size" << std::endl;
 
 	if (cur_size > MAX_CACHE_SIZE) {
-		std::cout << "DEBUG : removing" << std::endl;
+		// std::cout << "DEBUG : removing" << std::endl;
 		remove_oldest();
 	}
-	std::cout << "DEBUG : finished increasing" << std::endl;
+	// std::cout << "DEBUG : finished increasing" << std::endl;
 }

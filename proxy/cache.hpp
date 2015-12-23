@@ -9,12 +9,13 @@
 class Cache {
 public:
 	static Cache * get_instance();
+	static void reset_instance();
 	void put_entry(const std::string & url, CacheEntry * entry);
 	CacheEntry * get_entry(const std::string & url) const;
 	void increase_size(int size);
 private:
-	static const int MAX_CACHE_SIZE = 4000000;					//50 mb
-	static const int REMOVE_SIZE = 400000;						//5 mb
+	static int MAX_CACHE_SIZE;					//50 mb
+	static int REMOVE_SIZE;						//5 mb
 	std::map < std::string, CacheEntry *> entries;
 	int cur_size;
 

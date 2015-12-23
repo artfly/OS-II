@@ -112,9 +112,9 @@ void Client::client_work(short events) {
 			break;
 		}
 		case READ_CACHE: {
-			if (!remote_conn) {
+			// if (!remote_conn) {
 				// std::cout << "DEBUG : getting emutex, sock : " << client_conn->get_sock() << std::endl;
-			}
+			// }
 			pthread_mutex_t * emutex = entry->get_entry_mutex();
 			pthread_mutex_lock(emutex);
 			if (!remote_conn) {
@@ -135,10 +135,10 @@ void Client::client_work(short events) {
 		 		std::cout << "cond end" << std::endl;
 	 		}
 
-	 		if (!remote_conn) {
+	 		// if (!remote_conn) {
 				// std::cout << "DEBUG : chunk and finished state, sock : " << client_conn->get_sock() << std::endl;
 				// std::cout << chunk_len << " " << finished << std::endl;
-			}
+			// }
 
 	 		//finish
 	 		if (!chunk && finished) {
@@ -161,8 +161,9 @@ void Client::client_work(short events) {
 	 				chunk_to_read++;								
 	 			}
 	 			else {
-	 				std::cout << "OMG OMG OMG OMG OMG" << std::endl;
-	 				state = EXIT_CLIENT;
+	 				std::cout << "error : client disconnected" << std::endl;
+	 				remove_from_poll(client_conn->get_sock());
+	 				break;
 	 			}
 	 		}
 	 		//client without remote waits for signal

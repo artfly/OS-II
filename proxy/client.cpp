@@ -14,7 +14,7 @@ Client::Client(int sock, Proxy * proxy) : state(CONNECT_REMOTE), remote_state(WA
 }
 
 Client::~Client() {
-	std::cout << "DEBUG : destructor for sock " << client_conn->get_sock() << std::endl;
+	// std::cout << "DEBUG : destructor for sock " << client_conn->get_sock() << std::endl;
 	delete client_conn;
 	if (remote_conn)
 		delete remote_conn;
@@ -61,6 +61,7 @@ void Client::client_work(short events) {
 	 		if (!chunk && entry->is_finished()) {
 	 			// std::cout << "DEBUG : client finished. url : " << request_header->get_url() << std::endl;
 	 			state = EXIT_CLIENT;
+	 			break;
 	 		}
 	 		else if (chunk) {
 	 			int sent = client_conn->send_data(chunk, chunk_len);
@@ -88,59 +89,6 @@ void Client::client_work(short events) {
 }
 
 
-	// switch (state) {
-	// 	case CONNECT_REMOTE:
-	// 	 	if (events & POLLIN) {						
-	// 	 		connect_server();
-	// 	 	}
-	// 	 	else if (remote_conn) {
-	// 	 		if (!request_header->check_header()) {
-	// 	 			std::string msg = request_header->get_error_msg();
-	// 				client_conn->send_data(msg.c_str(), msg.size());
-	// 				state = EXIT_CLIENT;
-	// 	 		}
-	// 	 		else {
-	// 	 			if (remote_conn->is_connecting())
-	// 	 				break;
-	// 	 			entry = cache->get_entry(request_header->get_url());
-	// 	 			state = READ_CACHE;
-	// 	 			if (!entry) {
-	// 	 				entry = new CacheEntry();
-	// 	 				remote_state = READ_HEADER;
-	// 	 				return remote_conn->get_sock();
-	// 	 			}
-	// 	 		}
-	// 	 	}
-	// 	break;
-
-	// 	case READ_CACHE:
-	// 	 	if (events & POLLOUT) {
-	// 	 		const char * chunk = entry->get_data(chunk_to_read);
-	// 	 		int chunk_len = entry->get_length(chunk_to_read);
-	// 	 		if (!chunk && entry->is_finished()) {
-	// 	 			state = EXIT_CLIENT;
-	// 	 		}
-	// 	 		else if (chunk) {
-	// 	 			int sent = client_conn->send_data(chunk, chunk_len);
-	// 	 			if (sent >= 0) {
-	// 	 				chunk_to_read++;								
-	// 	 			}
-	// 	 		}
-	// 	 	}
-	// 	break;
-	// 	case SEND_ERROR:
-	// 		if (events & POLLOUT) {
-	// 			std::string msg = request_header->get_error_msg();
-	// 			client_conn->send_data(msg.c_str(), msg.size());
-	// 			state = EXIT_CLIENT;
-	// 		}
-	// 	case EXIT_CLIENT:
-	// 		std::cout << "Client bye-bye!" << std::endl;
-	// }
-	// return 0;
-// }
-
-
 void Client::remote_work(short events) {
 	switch (remote_state) {
 		case WAIT: {
@@ -163,7 +111,8 @@ void Client::remote_work(short events) {
 			break;
 		}
 		case READ_HEADER: {
-			read_remote_header();
+			if (!read_remote_header())
+				break;
 			state = READ_CACHE;
 			remote_state = READ_CONTENT;
 			proxy->add_to_poll(client_conn->get_sock(), this, POLLOUT);
@@ -173,76 +122,46 @@ void Client::remote_work(short events) {
 		case READ_CONTENT: {
 			if (events & POLLIN ) {
 				if (!read_remote_data()) {
-					remote_state = EXIT_REMOTE;
+					break;
 				}
+				proxy->add_to_poll(client_conn->get_sock(), this, POLLOUT);
+				proxy->add_to_poll(remote_conn->get_sock(), this, POLLIN|POLLOUT);
 			}
 			if (events & POLLOUT) {
 				if (response_header->get_length() >= 0 && total >= response_header->get_length()) {
 					entry->set_finished();
+					proxy->remove_from_poll(remote_conn->get_sock());								//TEST, ADD TO 1 IF OK
+					proxy->add_to_poll(client_conn->get_sock(), this, POLLOUT);
 					remote_state = EXIT_REMOTE;
 				}
 			}
-			proxy->add_to_poll(client_conn->get_sock(), this, POLLOUT);
+			else {
+				proxy->add_to_poll(client_conn->get_sock(), this, POLLOUT);
+			}
 			break;
 		}
 		case EXIT_REMOTE: {
-			// proxy->add_to_poll(client_conn->get_sock(), this, POLLOUT);
-			// std::cout << "Server bye-bye!" << std::endl;
+			proxy->remove_from_poll(remote_conn->get_sock());								//TEST, ADD TO 1 IF OK
+			proxy->add_to_poll(client_conn->get_sock(), this, POLLOUT);
 		}
-
 	}
-
-	// switch (remote_state) {
-	// 	case WAIT:
-	// 	break;
-	// 	case READ_HEADER:
-	// 		if (events & POLLOUT) {
-	// 			if (requested_header <= 0) {
-	// 				int error = 0;
-	// 				socklen_t len = sizeof(error);
-	// 				getsockopt(remote_conn->get_sock(), SOL_SOCKET, SO_ERROR, &error, &len);
-	// 				if (error != 0) {
-	// 					std::cerr << "error : server connect error" << std::endl;
-	// 					state = EXIT_CLIENT;
-	// 				}
-	// 				remote_conn->set_connecting(false);
-	// 				requested_header = remote_conn->send_data(client_conn->get_buffer(),
-	// 																 client_conn->get_length());
-	// 			}
-	// 		}
-	// 		if (events & POLLIN) {
-	// 			if (read_remote_header()) {
-	// 				remote_state = READ_CONTENT;
-	// 			}
-	// 		} 
-	// 	break;
-
-	// 	case READ_CONTENT:
-	// 		if (events & POLLIN) {
-	// 			if (!read_remote_data()) {
-	// 				remote_state = EXIT_REMOTE;
-	// 			}
-	// 		}
-	// 		if (events & POLLOUT) {
-	// 			if (response_header->get_length() >= 0 && total >= response_header->get_length()) {
-	// 				entry->set_finished();
-	// 				if (response_header->get_code() == response_header->OK_CODE)
-	// 					cache->put_entry(request_header->get_url(), entry);
-	// 				remote_state = EXIT_REMOTE;
-	// 			}
-	// 		}
-	// 	break;
-	// 	case EXIT_REMOTE:
-	// 	break;
-	// 		// std::cout << "Server bye-bye!" << std::endl;
-	// }
-	// return 0;
 }
 
-void Client::read_remote_header() {
+bool Client::read_remote_header() {
 	if (remote_conn->recv_data() <= 0) {
 		state = EXIT_CLIENT;
-		return;
+		return false;
+	}
+
+	entry = cache->get_entry(request_header->get_url());
+	//someone else added connection. start cache read.
+	if (entry) {
+		proxy->remove_from_poll(remote_conn->get_sock());
+		delete remote_conn;
+		state = READ_CACHE;
+		proxy->add_to_poll(client_conn->get_sock(), this, POLLOUT);
+		entry->add_reader();
+		return false;
 	}
 	// remote_conn->get_buffer()[7] = '0';	
 	response_header = new ResponseHeader(remote_conn->get_buffer());
@@ -255,12 +174,16 @@ void Client::read_remote_header() {
 	entry->append_data(remote_conn->get_buffer(), remote_conn->get_length());
 	// std::cout << "DEBUG : added new data to entry" << std::endl;					
 	total += remote_conn->get_length() - response_header->get_header_len();
+	return true;
 }
 
 bool Client::read_remote_data() {
 	int recv_bytes;
 	if ((recv_bytes = remote_conn->recv_data()) <= 0) {									
 		entry->set_finished();
+		remote_state = EXIT_REMOTE;
+		proxy->remove_from_poll(remote_conn->get_sock());								//TEST, ADD TO 1 IF OK
+		proxy->add_to_poll(client_conn->get_sock(), this, POLLOUT);
 		return false;
 	}
 	entry->append_data(remote_conn->get_buffer(), remote_conn->get_length());

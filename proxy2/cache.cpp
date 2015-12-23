@@ -10,12 +10,11 @@ Cache::Cache() : cur_size(0) {
 }
 
 Cache::~Cache() {
-	std::cout << "cache Dtor" << std::endl;
 	std::map<std::string, CacheEntry *>::iterator it = entries.begin();
-  	while (it != entries.end()) {
+  	for (it = entries.begin(); it != entries.end(); ++it) {
+  		// std::cout << "DEBUG : deleting url : " << it->first << std::endl;
   		delete it->second;
   	}
-  	std::cout << "cache dtor end" << std::endl;
 }
 
 void Cache::reset_instance() {
@@ -42,8 +41,10 @@ void Cache::remove_oldest() {
 	std::map<std::string, CacheEntry *>::iterator it;
 	int removed = 0;
 	for (it = entries.begin(); it != entries.end(); ++it) {
-		if (removed >= REMOVE_SIZE)
+		if (removed >= REMOVE_SIZE) {
+			cur_size -= removed;
 			return;
+		}
 		pthread_mutex_t * rmutex = it->second->get_readers_mutex();
 		pthread_mutex_lock(rmutex);
 		std::cout << "DEBUG : zero readers? " << !it->second->is_used() << std::endl;
