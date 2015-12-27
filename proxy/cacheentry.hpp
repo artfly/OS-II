@@ -16,7 +16,7 @@ class Cache;
 
 class CacheEntry {
 public:
-	CacheEntry();
+	CacheEntry(std::string url);
 	~CacheEntry();
 
 	char * get_data(size_t index);
@@ -24,24 +24,23 @@ public:
 	size_t get_length(size_t index) const;
 	size_t get_full_length() const;
 	size_t get_total() const;
-
-	size_t get_entry_count() const;
-	void set_entry_count(size_t count);
+	std::string get_url() const;
 
 	bool is_finished() const;
 	void set_finished();
-	void set_cache(Cache * cache);
+
 	void add_reader();
 	void remove_reader();
 	bool is_used() const;
+	
+	void update_timestamp(std::time_t new_timestamp);
 	std::time_t get_timestamp() const;
 private:
 	std::vector< std::pair<char *, int> > chunks;
 
-	Cache * cache;
-	size_t entry_count;
 	bool finished;
 	int readers;
+	std::string url;
 	std::time_t timestamp;
 };
 

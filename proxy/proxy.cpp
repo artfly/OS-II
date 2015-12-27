@@ -47,8 +47,6 @@ void Proxy::add_proxy() {
 	poll_size = 1;
 }
 
-
-
 void Proxy::run() {
 	std::cout << "Proxy is up and running" << std::endl;
 	while(1) {
@@ -84,12 +82,11 @@ void Proxy::add_client() {
 		std::cerr << "error : could not add client, errno : " << errno << std::endl;
 		return;
 	}
-	std::cout << "connection from client" << client_sock << std::endl;
+	std::cout << "DEBUG : connection from client " << client_sock << std::endl;
 	add_to_poll(client_sock, new Client(client_sock, this), POLLIN);
 }
 
 void Proxy::add_to_poll(int sock, Client * client, int mode) {
-	//change mode
 	for (int i = 1; i < poll_size; i++) {
 		if (poll_list[i].fd == sock) {
 			poll_list[i].events = mode;	
@@ -97,7 +94,6 @@ void Proxy::add_to_poll(int sock, Client * client, int mode) {
 		}
 	}
 
-	//add new
 	for (int i = 1; i < MAX_CLIENTS; i++) {
 		if (poll_list[i].fd <= 0) {
 			poll_list[i].fd = sock;
@@ -118,6 +114,22 @@ void Proxy::remove_from_poll(int sock) {
 	}
 }
 
+void Proxy::attach_to_remote(Client * client, std::string url) {
+	std::map<int, Client *>::iterator it;
+	for (it = clients.begin(); it != clients.end(); ++it) {
+		if (it->second->attach_to_remote(client, url))
+			return;
+	}
+}
+
+void Proxy::detach_from_remote(Client * client, std::string url) {
+	std::map<int, Client *>::iterator it;
+	for (it = clients.begin(); it != clients.end(); ++it) {
+		if (it->second->detach_from_remote(client, url))
+			return;
+	}
+}
+
 void Proxy::remove_dead() {
 	std::map<int, Client *>::iterator it;
 	std::map<int, Client *>::iterator it_remote;
@@ -135,8 +147,4 @@ void Proxy::remove_dead() {
 			poll_list[i].fd = -1;
 		}
 	}
-}
-
-void Proxy::say_hi() {
-	// std::cout << "Hi!" << std::endl;
 }

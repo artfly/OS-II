@@ -17,9 +17,11 @@ class Proxy {
 	Proxy(int port);
 	~Proxy();
 	void run();
- 	void say_hi();
+
  	void remove_from_poll(int sock); 
  	void add_to_poll(int socket, Client * client, int mode);
+ 	void attach_to_remote(Client * client, std::string url);
+ 	void detach_from_remote(Client * client, std::string url);
  private:
  	const static int BACKLOG = 50;
  	const static int MAX_CLIENTS = 256;

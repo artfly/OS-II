@@ -5,6 +5,7 @@ Connection::Connection(int sock) : len(0), sock(sock), connecting(false) {
 }
 
 Connection::~Connection() {
+	free(buffer);
 	close(sock);
 }
 

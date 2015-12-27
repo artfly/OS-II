@@ -12,6 +12,8 @@
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <iostream>
+#include <vector>
+#include <algorithm>
 #include <string.h>
 #include <netdb.h>
 #include <errno.h>
@@ -32,8 +34,13 @@ class Client {
 	Client(int sock, Proxy * proxy);
 	~Client();
 	void work(short events, int socket);
+
 	bool alive() const;
+	int get_client_sock() const;
 	int get_sock(int sock) const;
+
+	bool attach_to_remote(Client * client, std::string url);
+	bool detach_from_remote(Client * client, std::string url);
  private:
  	ClientState state;
  	RemoteState remote_state;
@@ -45,16 +52,22 @@ class Client {
 
 	void client_work(short events);
 	void connect_server();
+	void read_cache();
+	void send_error();
 
 	void remote_work(short events);
+	bool send_request_header();
 	bool read_remote_header();
 	bool read_remote_data();
+	void notify_clients();
 
  	Connection * client_conn;
  	Connection * remote_conn;
  	RequestHeader * request_header;
  	ResponseHeader * response_header;
  	Proxy * proxy;
+
+ 	std::vector<Client *> clients;
 };
 
 

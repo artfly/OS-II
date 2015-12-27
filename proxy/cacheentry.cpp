@@ -1,11 +1,12 @@
 #include "cacheentry.hpp"
 #include "cache.hpp"
 
-CacheEntry::CacheEntry() : entry_count(0), finished(false), readers(1) {
+CacheEntry::CacheEntry(std::string url) : finished(false),  readers(1), url(url) {
 	timestamp = std::time(NULL);
 }
 
 CacheEntry::~CacheEntry() {
+	std::cout << "DTOR" << std::endl;
 	for (size_t i = 0; i < chunks.size(); i++) {
 		free(chunks[i].first);
 	}
@@ -35,15 +36,7 @@ void CacheEntry::append_data(char * buffer, int len) {
 	char * copy = (char *) malloc(len);
 	memcpy(copy, buffer, len);
 	chunks.push_back(std::make_pair(copy, len));
-	Cache::get_instance()->increase_size(len);
-}
-
-size_t CacheEntry::get_entry_count() const {
-	return entry_count;
-}
-
-void CacheEntry::set_entry_count(size_t count) {
-	entry_count = count;
+	// Cache::get_instance()->increase_size(len);
 }
 
 bool CacheEntry::is_finished() const {
@@ -58,16 +51,13 @@ size_t CacheEntry::get_total() const {
 	return chunks.size();
 }
 
-void CacheEntry::set_cache(Cache * cache) {
-	this->cache = cache;
-}
-
 void CacheEntry::add_reader() {
-	timestamp = std::time(NULL);
+	std::cout << "DEBUG : add_reader" << std::endl;
 	readers++;
 }
 
 void CacheEntry::remove_reader() {
+	std::cout << "DEBUG : remove_reader" << std::endl;
 	readers--;
 }
 
@@ -77,4 +67,12 @@ bool CacheEntry::is_used() const {
 
 std::time_t CacheEntry::get_timestamp() const {
 	return timestamp;
+}
+
+void CacheEntry::update_timestamp(std::time_t new_timestamp) {
+	timestamp = new_timestamp;
+}
+
+std::string CacheEntry::get_url() const {
+	return url;
 }
