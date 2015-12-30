@@ -29,78 +29,70 @@ Cache * Cache::get_instance() {
 	return instance;
 }
 
-void Cache::put_entry(const std::string & url, CacheEntry * entry) {
-	entries[url] = entry;
-	entry->set_entry_count(entries.size());
-	// entry->set_cache(this);
+bool Cache::put_entry(CacheEntry * entry, int size) {
+	std::cout << "DEBUG : size " << size << " cur_size : " << cur_size << std::endl;
+	if (size < 0)
+		return false;
+	if (MAX_CACHE_SIZE - cur_size < size) {
+		remove_oldest(size);
+	}
+	std::cout << "DEBUG : cur_size after remove : " << cur_size << std::endl;
+	if (MAX_CACHE_SIZE - cur_size < size)
+		return false;
+	std::cout << "DEBUG : adding entry to cache" << std::endl;
+	cur_size += size;
+	entries[entry->get_url()] = entry;
+	timestamps.insert(std::pair<std::time_t, CacheEntry *>(entry->get_timestamp(), entry));
+	return true;
 }
 
-void Cache::remove_oldest() {
-	std::cout << "DEBUG : size before remove : " << cur_size << std::endl;
-	std::vector< std::pair<std::string, CacheEntry *> > oldest;
-	std::map<std::string, CacheEntry *>::iterator it;
+void Cache::update_timestamp(CacheEntry * entry) {
+	std::time_t old_timestamp = entry->get_timestamp();
+	std::time_t new_timestamp = std::time(NULL);
+	std::pair<std::multimap<time_t, CacheEntry *>::iterator, std::multimap<time_t, CacheEntry *>::iterator> range;
+	range = timestamps.equal_range(old_timestamp);
+	for (std::multimap<time_t, CacheEntry *>::iterator it = range.first; it != range.second; ++it) {
+		if (it->second == entry) {
+			timestamps.erase(it);
+			timestamps.insert(std::pair<std::time_t, CacheEntry *>(new_timestamp, entry));
+			return;
+		}
+	}
+	entry->update_timestamp(new_timestamp);
+}
+
+void Cache::remove_oldest(int added) {
+	std::cout << "DEBUG : here " << std::endl;
+	int need_to_remove = REMOVE_SIZE;
 	int removed = 0;
-	for (it = entries.begin(); it != entries.end(); ++it) {
-		if (removed >= REMOVE_SIZE) {
+	if (added > need_to_remove) need_to_remove = added;
+	std::multimap<std::time_t, CacheEntry *>::iterator it;
+	for (it = timestamps.begin(); it != timestamps.end(); ++it) {
+		if (removed >= need_to_remove) {
 			cur_size -= removed;
 			return;
 		}
-		pthread_mutex_t * rmutex = it->second->get_readers_mutex();
-		pthread_mutex_lock(rmutex);
-		std::cout << "DEBUG : zero readers? " << !it->second->is_used() << std::endl;
-		std::cout << "DEBUG : url : " << it->first << std::endl;
+		std::cout << "DEBUG : entry : " << it->second->get_url() << " is " << it->second->is_used()  << " used" << std::endl;
 		if (!it->second->is_used()) {
-			//mutex?
+			std::cout << "DEBUG : unused entry : " << it->second->get_url() << std::endl;
 			removed += it->second->get_full_length();
 			delete it->second;
-			entries.erase(it->first);
+			std::cout << "DEBUG : deleted unused entry" << std::endl;
+			entries.erase(it->second->get_url());
+			timestamps.erase(it);
 		}
-		pthread_mutex_unlock(rmutex);
 	}
 	cur_size -= removed;
-	std::cout << "DEBUG : size after remove : " << cur_size << std::endl;
-	// while (it != entries.end()) {
-
-	// 	if (oldest.size() < 10) {
-	// 		oldest.push_back(std::make_pair(it->first, it->second));
-	// 		continue;
-	// 	}
-
-	// 	for(std::vector< std::pair<std::string, CacheEntry *> >::iterator oldest_it =
-	// 								oldest.begin(); oldest_it != oldest.end(); ++oldest_it) {
-	// 		if (oldest_it->second->get_entry_count() > it->second->get_entry_count()) {
-	// 			*oldest_it = std::make_pair(it->first, it->second);
-	// 		}
-	// 	}
- //  	}
-
- //  	for(std::vector< std::pair<std::string, CacheEntry *> >::iterator it =
- //  												oldest.begin(); it != oldest.end(); ++it) {
- //  		entries.erase(it->first);
-	// }
+	if (cur_size < 0) cur_size = 0;
 }
 
-CacheEntry * Cache::get_entry(const std::string & url) const {
-	std::map<std::string, CacheEntry *>::const_iterator it = entries.find(url);
+CacheEntry * Cache::get_entry(std::string url) {
+	std::map<std::string, CacheEntry *>::iterator it = entries.find(url);
 	if (it == entries.end()) {
 		return NULL;
 	}
 	std::cout << "Getting entry from cache : " << url << std::endl;
 	return it->second;
-}
-
-void Cache::increase_size(int size) {
-	pthread_mutex_lock(&cache_mutex);
-	cur_size += size;
-	// std::cout << "DEBUG : adding cur_size" << std::endl;
-
-	if (cur_size > MAX_CACHE_SIZE) {
-		// std::cout << "DEBUG : removing" << std::endl;
-		remove_oldest();
-	}
-	std::cout << "DEBUG : new cache size : " << cur_size << std::endl;
-	pthread_mutex_unlock(&cache_mutex);
-	// std::cout << "DEBUG : finished increasing" << std::endl;
 }
 
 pthread_mutex_t * Cache::get_cache_mutex() {

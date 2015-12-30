@@ -45,6 +45,7 @@ class Client {
  	int chunk_to_read;
  	int total;
  	int requested_header;
+ 	bool in_cache;
 
  	CacheEntry * entry;
  	Cache * cache;

@@ -46,6 +46,7 @@ class Client {
  	RemoteState remote_state;
  	int chunk_to_read;
  	int total;
+ 	bool in_cache;
 
  	CacheEntry * entry;
  	Cache * cache;

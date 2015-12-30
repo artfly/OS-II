@@ -12,8 +12,6 @@
 #include <utility>
 #include <ctime>
 
-class Cache;
-
 class CacheEntry {
 public:
 	CacheEntry(std::string url);

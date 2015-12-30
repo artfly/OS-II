@@ -3,7 +3,7 @@
 
 
 Client::Client(int sock, Proxy * proxy) : state(CONNECT_REMOTE), remote_state(WAIT),
-									chunk_to_read(0), total(0), proxy(proxy) {
+									chunk_to_read(0), total(0), in_cache(false), proxy(proxy) {
 	client_conn = new Connection(sock);
 	remote_conn = NULL;
 	cache = Cache::get_instance();
@@ -16,14 +16,18 @@ Client::~Client() {
 	std::cout << "DEBUG : destructor for sock " << client_conn->get_sock() << std::endl;
 	if (client_conn)
 		delete client_conn;
+	std::cout << "DEBUG : removed client_conn " << std::endl;
 	if (remote_conn)
 		delete remote_conn;
+	std::cout << "DEBUG : removed remote_conn " << std::endl;
 	if (request_header) {
 		delete request_header;
 	}
+	std::cout << "DEBUG : removed request_header " << std::endl;
 	if (entry) {
 		entry->remove_reader();
 	}
+	std::cout << "DEBUG : removed reader " << std::endl;
 	// if (response_header->get_code() != ResponseHeader::OK_CODE) {
 	// 	std::cout << "DEBUG : code : " << response_header->get_code() << std::endl;
 	// 	delete entry;
@@ -31,6 +35,8 @@ Client::~Client() {
 	if (response_header) {
 		delete response_header;
 	}
+		std::cout << "DEBUG : removed response_header " << std::endl;
+
 	// std::cout << "DEBUG : end of dtor" << std::endl;
 }
 
@@ -82,6 +88,7 @@ void Client::connect_server() {
 	
 	entry = cache->get_entry(request_header->get_url());
 	if (entry) {
+		cache->update_timestamp(entry);
 		proxy->attach_to_remote(this, request_header->get_url());
 		proxy->add_to_poll(client_conn->get_sock(), this, POLLOUT);
 		entry->add_reader();
@@ -185,7 +192,7 @@ void Client::remote_work(short events) {
 			break;
 		}
 		case READ_CONTENT: {
-			if (!cache->get_entry(entry->get_url()) && find(clients.begin(), clients.end(), this) == clients.end()) {
+			if (!in_cache && find(clients.begin(), clients.end(), this) == clients.end()) {
 				proxy->add_to_poll(client_conn->get_sock(), this, POLLOUT);
 				std::cout << "DEBUG : state is EXIT_CLIENT now" << std::endl;
 				state = EXIT_CLIENT;
@@ -245,8 +252,9 @@ bool Client::read_remote_header() {
 	entry = cache->get_entry(request_header->get_url());
 	//someone else added connection. start cache read.
 	if (entry) {
+		cache->update_timestamp(entry);
 		proxy->remove_from_poll(remote_conn->get_sock());
-		delete remote_conn;
+		// delete remote_conn;
 		state = READ_CACHE;
 		proxy->add_to_poll(client_conn->get_sock(), this, POLLOUT);
 		entry->add_reader();
@@ -257,7 +265,7 @@ bool Client::read_remote_header() {
 	entry = new CacheEntry(request_header->get_url());		
 	std::cout << response_header->get_code() << std::endl; 
 	if (response_header->get_code() == response_header->OK_CODE)
-		cache->put_entry(entry, response_header->get_length());			
+		in_cache = cache->put_entry(entry, response_header->get_length());			
 	// std::cout << "DEBUG : adding new data to entry" << std::endl;					
 	entry->append_data(remote_conn->get_buffer(), remote_conn->get_length());
 	clients.push_back(this);
@@ -286,7 +294,7 @@ bool Client::read_remote_data() {
 }
 
 bool Client::alive() const {
-	if (state == EXIT_CLIENT && response_header && response_header->get_code() != ResponseHeader::OK_CODE)
+	if (entry && state == EXIT_CLIENT && response_header && response_header->get_code() != ResponseHeader::OK_CODE)
 		delete entry;
 	return state != EXIT_CLIENT;
 }

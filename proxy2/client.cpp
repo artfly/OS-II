@@ -2,7 +2,7 @@
 
 
 Client::Client(int sock) :  poll_size(2), state(CONNECT_REMOTE), remote_state(WAIT),
-													 chunk_to_read(0), total(0), requested_header(0) {
+													 chunk_to_read(0), total(0), requested_header(0), in_cache(true) {
 	client_conn = new Connection(sock);
 	remote_conn = NULL;
 	cache = Cache::get_instance();
@@ -18,11 +18,26 @@ void Client::create_poll() {
 }
 
 Client::~Client() {
-	// std::cout << "DEBUG : destructor for " << client_conn->get_sock() <<std::endl;
-	delete client_conn;
+	if (client_conn)
+		delete client_conn;
 	// std::cout << "DEBUG : dtor start" << std::endl;
 	//danger!!!
-	if (entry && remote_conn && response_header->get_code() != ResponseHeader::OK_CODE) {
+	pthread_mutex_t * cmutex = cache->get_cache_mutex();
+	pthread_mutex_lock(cmutex);
+	if (request_header)
+		entry = cache->get_entry(request_header->get_url());
+	else {
+		entry = NULL;
+	}
+	if (entry) {
+		pthread_mutex_t * emutex = entry->get_entry_mutex();
+		pthread_mutex_lock(emutex);
+		entry->remove_reader();
+		pthread_mutex_unlock(emutex);
+	}
+	pthread_mutex_unlock(cmutex);
+
+	if (entry && remote_conn && !in_cache) {
 		delete entry;
 	}
 	// std::cout << "DEBUG : dtor ok?" << std::endl;
@@ -51,6 +66,8 @@ void Client::run() {
 		if (!alive()) {
 			return;
 		}
+		std::cout << "DEBUG : poll_list[0] = " << poll_list[0].fd << std::endl;
+		std::cout << "DEBUG : poll_list[1] = " << poll_list[1].fd << std::endl;
 	}
 }
 
@@ -103,9 +120,8 @@ void Client::work(short events, int sock) {
 }
 
 void Client::client_work(short events) {
-	// std::cout << "DEBUG : states " << state << " " << remote_state << " sock : " << client_conn->get_sock() <<  std::endl;
-	// std::cout << "DEBUG : poll : " << poll_list[0].fd << " " << poll_list[0].events << std::endl; 
-	// std::cout << "DEBUG : poll : " << poll_list[1].fd << " " << poll_list[1].events << std::endl; 
+	if (request_header)
+		std::cout << "DEBUG : sock : " << client_conn->get_sock() << " addr : " << request_header->get_url() << " state : " << state << std::endl;
 	switch (state) {
 		case CONNECT_REMOTE: {
 			connect_server();
@@ -126,13 +142,11 @@ void Client::client_work(short events) {
 
 	 		//client without remote waits for signal
 	 		if (!remote_conn && !chunk && !finished) {
-	 			std::cout << "cond start" << std::endl;
 	 			pthread_cond_t * econd = entry->get_entry_cond();
 	 			pthread_cond_wait(econd, emutex);
 	 			chunk = entry->get_data(chunk_to_read);
 		 		chunk_len = entry->get_length(chunk_to_read);
 		 		finished = entry->is_finished();
-		 		std::cout << "cond end" << std::endl;
 	 		}
 
 	 		// if (!remote_conn) {
@@ -142,12 +156,8 @@ void Client::client_work(short events) {
 
 	 		//finish
 	 		if (!chunk && finished) {
-	 			pthread_mutex_t * rmutex = entry->get_readers_mutex();
 	 			// std::cout << "DEBUG : let me guess. Sigfault?" << std::endl;
-	 			entry->remove_reader();
-	 			std::cout << "DEBUG : zero readers? " << !entry->is_used() << std::endl;
-	 			std::cout << "DEBUG : url : " << request_header->get_url() << std::endl;
-	 			pthread_mutex_unlock(rmutex);
+	 			
 	 			pthread_mutex_unlock(emutex);
 	 			// std::cout << "DEBUG : client finished. url : " << request_header->get_url() << std::endl;
 	 			state = EXIT_CLIENT;
@@ -161,8 +171,13 @@ void Client::client_work(short events) {
 	 				chunk_to_read++;								
 	 			}
 	 			else {
-	 				std::cout << "error : client disconnected" << std::endl;
-	 				remove_from_poll(client_conn->get_sock());
+
+	 				if (!finished && in_cache) {
+	 					remove_from_poll(client_conn->get_sock());
+	 				}
+	 				else {
+	 					state = EXIT_CLIENT;
+	 				}
 	 				break;
 	 			}
 	 		}
@@ -187,8 +202,7 @@ void Client::client_work(short events) {
 
 
 void Client::remote_work(short events) {
-	// std::cout << "DEBUG : states " << state << " " << remote_state << std::endl;
-	// std::cout << "DEBUG : revents on remote " << events << std::endl;
+	std::cout << "DEBUG : sock : " << remote_conn->get_sock() << " addr : " << request_header->get_url() << " remote state : " << remote_state << std::endl;
 	switch (remote_state) {
 		case WAIT: {
 			break;
@@ -270,20 +284,16 @@ bool Client::read_remote_header() {
 	//someone else added connection. start cache read.
 	if (entry) {
 		remove_from_poll(remote_conn->get_sock());
-		delete remote_conn;
 		state = READ_CACHE;
 		add_to_poll(client_conn->get_sock(), POLLOUT);
-		pthread_mutex_t * rmutex = entry->get_readers_mutex();
-		pthread_mutex_lock(rmutex);
 		entry->add_reader();
-		pthread_mutex_unlock(rmutex);
 		pthread_mutex_unlock(cmutex);
 		return false;
 	}
 	//new entry
-	entry = new CacheEntry();		
+	entry = new CacheEntry(request_header->get_url());		
 	if (response_header->get_code() == response_header->OK_CODE)
-		cache->put_entry(request_header->get_url(), entry);			
+		in_cache = cache->put_entry(entry, response_header->get_length() + response_header->get_header_len());			
 	// std::cout << "DEBUG : adding new data to entry" << std::endl;					
 	pthread_mutex_unlock(cmutex);
 	pthread_mutex_t * emutex = entry->get_entry_mutex();
@@ -339,10 +349,7 @@ void Client::connect_server() {
 	// std::cout << "DEBUG : got cmutex. wow." << std::endl;
 	entry = cache->get_entry(request_header->get_url());
 	if (entry) {
-		pthread_mutex_t * rmutex = entry->get_readers_mutex();
-		pthread_mutex_lock(rmutex);
 		entry->add_reader();
-		pthread_mutex_unlock(rmutex);
 		add_to_poll(client_conn->get_sock(), POLLOUT);
 		state = READ_CACHE;
 		pthread_mutex_unlock(cmutex);

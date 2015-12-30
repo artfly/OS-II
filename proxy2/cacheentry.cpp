@@ -1,13 +1,14 @@
 #include "cacheentry.hpp"
 #include "cache.hpp"
 
-CacheEntry::CacheEntry() : entry_count(0), finished(false), readers(1) {
+CacheEntry::CacheEntry(std::string url) : finished(false), readers(1), url(url) {
 	pthread_mutexattr_t attr;
     pthread_mutexattr_init(&attr);
     pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
-    pthread_mutex_init(&readers_mutex, &attr);
     pthread_mutex_init(&entry_mutex, &attr);
     pthread_cond_init(&entry_cond, NULL);
+
+    timestamp = std::time(NULL);
 }
 
 CacheEntry::~CacheEntry() {
@@ -40,15 +41,7 @@ void CacheEntry::append_data(char * buffer, int len) {
 	char * copy = (char *) malloc(len);
 	memcpy(copy, buffer, len);
 	chunks.push_back(std::make_pair(copy, len));
-	Cache::get_instance()->increase_size(len);
-}
-
-size_t CacheEntry::get_entry_count() const {
-	return entry_count;
-}
-
-void CacheEntry::set_entry_count(size_t count) {
-	entry_count = count;
+	// Cache::get_instance()->increase_size(len);
 }
 
 bool CacheEntry::is_finished() const {
@@ -73,12 +66,19 @@ void CacheEntry::remove_reader() {
 }
 
 bool CacheEntry::is_used() const {
-	std::cout << "DEBUG : readers on is_used " << readers << std::endl;
 	return readers != 0;
 }
 
-pthread_mutex_t * CacheEntry::get_readers_mutex() {
-	return & readers_mutex;
+std::time_t CacheEntry::get_timestamp() const {
+	return timestamp;
+}
+
+void CacheEntry::update_timestamp(std::time_t new_timestamp) {
+	timestamp = new_timestamp;
+}
+
+std::string CacheEntry::get_url() const {
+	return url;
 }
 
 pthread_cond_t * CacheEntry::get_entry_cond() {

@@ -11,12 +11,11 @@
 #include <pthread.h>
 #include <unistd.h>
 #include <utility>
-
-class Cache;
+#include <ctime>
 
 class CacheEntry {
 public:
-	CacheEntry();
+	CacheEntry(std::string url);
 	~CacheEntry();
 
 	char * get_data(size_t index);
@@ -24,28 +23,28 @@ public:
 	size_t get_length(size_t index) const;
 	size_t get_full_length() const;
 	size_t get_total() const;
-
-	size_t get_entry_count() const;
-	void set_entry_count(size_t count);
+	std::string get_url() const;
 
 	bool is_finished() const;
 	void set_finished();
+
 	void add_reader();
 	void remove_reader();
 	bool is_used() const;
 
-	pthread_mutex_t * get_readers_mutex();
+	void update_timestamp(std::time_t new_timestamp);
+	std::time_t get_timestamp() const;
+
 	pthread_mutex_t * get_entry_mutex();
 	pthread_cond_t * get_entry_cond();
 private:
 	std::vector< std::pair<char *, int> > chunks;
 
-	Cache * cache;
-	size_t entry_count;
 	bool finished;
 	int readers;
+	std::string url;
+	std::time_t timestamp;
 
-	pthread_mutex_t readers_mutex;
 	pthread_mutex_t entry_mutex;
 	pthread_cond_t entry_cond;
 };

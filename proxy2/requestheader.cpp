@@ -65,11 +65,11 @@ bool RequestHeader::check_header() {
 		error = true;
 		return false;
 	}
-	if (version.compare(SUPPORTED_VERSION)) {
-		error_msg = MESSAGE_505;
-		error = true;
-		return false;
-	}
+	// if (version.compare(SUPPORTED_VERSION)) {
+	// 	error_msg = MESSAGE_505;
+	// 	error = true;
+	// 	return false;
+	// }
 	if (protocol.compare(SUPPORTED_PROTOCOL)) {
 		error_msg = MESSAGE_500;
 		error = true;

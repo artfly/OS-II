@@ -11,10 +11,9 @@ class Cache {
 public:
 	static Cache * get_instance();
 	static void reset_instance();
-	void put_entry(CacheEntry * entry, int size);
+	bool put_entry(CacheEntry * entry, int size);
+	void update_timestamp(CacheEntry * entry);
 	CacheEntry * get_entry(std::string url);
-	void increase_size(int size);
-	int get_available() const;
 private:
 	static const int MAX_CACHE_SIZE = 50000000;					//50 mb
 	static const int REMOVE_SIZE = 5000000;						//5 mb
@@ -28,7 +27,6 @@ private:
 	int cur_size;
 
 	void remove_oldest(int added);
-	void update_timestamp(CacheEntry * entry);
 };
 
 #endif

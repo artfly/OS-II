@@ -24,22 +24,25 @@ Cache * Cache::get_instance() {
 	return instance;
 }
 
-void Cache::put_entry(CacheEntry * entry, int size) {
+bool Cache::put_entry(CacheEntry * entry, int size) {
 	std::cout << "DEBUG : size " << size << " cur_size : " << cur_size << std::endl;
 	if (size < 0)
-		return;
+		return false;
 	if (MAX_CACHE_SIZE - cur_size < size) {
 		remove_oldest(size);
 	}
 	if (MAX_CACHE_SIZE - cur_size < size)
-		return;
+		return false;
 	std::cout << "DEBUG : adding entry to cache" << std::endl;
 	cur_size += size;
 	entries[entry->get_url()] = entry;
 	timestamps.insert(std::pair<std::time_t, CacheEntry *>(entry->get_timestamp(), entry));
+	return true;
 }
 
 void Cache::update_timestamp(CacheEntry * entry) {
+	if (!entry)
+		return;
 	std::time_t old_timestamp = entry->get_timestamp();
 	std::time_t new_timestamp = std::time(NULL);
 	std::pair<std::multimap<time_t, CacheEntry *>::iterator, std::multimap<time_t, CacheEntry *>::iterator> range;
@@ -82,13 +85,5 @@ CacheEntry * Cache::get_entry(std::string url) {
 		return NULL;
 	}
 	std::cout << "Getting entry from cache : " << url << std::endl;
-	update_timestamp(it->second);
 	return it->second;
-}
-
-void Cache::increase_size(int size) {
-	cur_size += size;
-	if (cur_size > MAX_CACHE_SIZE) {
-		remove_oldest(size);
-	}
 }

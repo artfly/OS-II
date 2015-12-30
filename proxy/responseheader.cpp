@@ -28,6 +28,7 @@ void ResponseHeader::parse_header(char *header) {
 }
 
 int ResponseHeader::get_length() const {
+	std::cout << "DEBUG : content_len = " << content_len << " header_len = " << header_len << std::endl;
 	return content_len;
 }
 

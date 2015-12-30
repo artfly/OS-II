@@ -111,5 +111,5 @@ void * Proxy::client_body(void * param) {
 	// std::cout << "DEBUG : threads_num = " << threads_num << std::endl;
 	pthread_cond_signal(&proxy_cond);
 	pthread_mutex_unlock(&proxy_mutex);
-	return NULL;
+	pthread_exit(NULL);
 }
